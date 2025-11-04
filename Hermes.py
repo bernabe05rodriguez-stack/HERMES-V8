@@ -242,7 +242,7 @@ class Hermes:
         self.wait_between_messages = tk.IntVar(value=2)  # Tiempo entre Business y Normal
         self.write_speed = tk.StringVar(value="Normal")  # Velocidad de escritura: Lento, Normal, Rápido
         self.whatsapp_mode = tk.StringVar(value="Todas")  # Qué WhatsApp usar: Normal, Business, Ambos
-        self.traditional_send_mode = tk.StringVar(value="Simple")  # Modo de envío tradicional: Simple, Doble, Triple
+        self.traditional_send_mode = tk.StringVar(value="Business")  # Modo de envío tradicional: Business, Normal, Ambos, TODOS
 
         self.raw_data = []
         self.columns = []
@@ -557,7 +557,7 @@ class Hermes:
         mode_label.grid(row=0, column=0, padx=(20, 10), sticky='w')
         
         self.mode_selector = ctk.CTkOptionMenu(mode_selector_frame, variable=self.traditional_send_mode,
-                                               values=["Simple", "Doble", "Triple"],
+                                               values=["Business", "Normal", "Business/Normal", "B/N.1/N.2"],
                                                font=self.fonts['button'],
                                                fg_color=self.colors['action_excel'],
                                                button_color=self.colors['action_excel'],
@@ -2331,16 +2331,20 @@ class Hermes:
         mode = self.traditional_send_mode.get()
         self.log(f"Modo de envío: {mode}", 'info')
         
-        if mode == "Simple":
+        if mode == "Business":
             self._run_simple_mode()
-        elif mode == "Doble":
+        elif mode == "Normal":
+            # Reutiliza _run_simple_mode pero cambiando el paquete de WA
+            self._run_simple_mode(whatsapp_package="com.whatsapp")
+        elif mode == "Business/Normal":
             self._run_doble_mode()
-        elif mode == "Triple":
+        elif mode == "B/N.1/N.2":
             self._run_triple_mode()
     
-    def _run_simple_mode(self):
-        """Modo Simple: 1 URL por teléfono (comportamiento original)."""
-        self.log("Ejecutando Modo Simple...", 'info')
+    def _run_simple_mode(self, whatsapp_package="com.whatsapp.w4b"):
+        """Modo Simple: 1 URL por teléfono, usando el paquete de WhatsApp especificado."""
+        log_msg = "Ejecutando Modo Business..." if whatsapp_package == "com.whatsapp.w4b" else "Ejecutando Modo Normal..."
+        self.log(log_msg, 'info')
         idx = 0  # Índice del dispositivo a usar
         
         for i, link in enumerate(self.links):
@@ -2351,8 +2355,8 @@ class Hermes:
             device = self.devices[idx]
             idx = (idx + 1) % len(self.devices)
             
-            # Ejecutar tarea con Business
-            self.run_single_task(device, link, None, i + 1, whatsapp_package="com.whatsapp.w4b")
+            # Ejecutar tarea con el paquete de WA especificado
+            self.run_single_task(device, link, None, i + 1, whatsapp_package=whatsapp_package)
 
     def _run_doble_mode(self):
         """Modo Doble: Rota secuencialmente entre dispositivos y cuentas Business/Normal."""
