@@ -1054,6 +1054,9 @@ class Hermes:
 
             self.devices = [l.split('\t')[0] for l in res.stdout.strip().split('\n')[1:] if '\tdevice' in l]
 
+            # Actualizar las etiquetas de la UI
+            self._update_device_labels()
+
             if self.devices:
                 self.log(f"✓ {len(self.devices)} disp: {', '.join(self.devices)}", 'success')
                 messagebox.showinfo("Dispositivos", f"{len(self.devices)} dispositivo(s) econtrado(s):\n\n" + "\n".join(self.devices))
@@ -1199,6 +1202,37 @@ class Hermes:
             self.log(f"No se pudieron cargar mensajes predeterminados: {e}", 'warning')
         return False
 
+    def _load_fidelizado_messages_from_file(self):
+        """Abre un diálogo para cargar un archivo .txt de mensajes para el modo Fidelizado."""
+        filepath = filedialog.askopenfilename(
+            title="Seleccionar archivo de Mensajes (.txt)",
+            filetypes=[("Text Files", "*.txt"), ("All files", "*.*")],
+            parent=self.root
+        )
+        if not filepath:
+            return
+
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                lines = [line.strip() for line in f.readlines() if line.strip()]
+
+            if not lines:
+                messagebox.showwarning("Archivo Vacío", "El archivo seleccionado está vacío.", parent=self.root)
+                return
+
+            # Actualizar mensajes para ambos modos
+            self.manual_messages_numbers = lines
+            self.manual_messages_groups = lines
+
+            # Actualizar la UI
+            self.fidelizado_message_count_label.configure(text=f"✅ {len(lines)} mensajes cargados")
+            self.log(f"Cargados {len(lines)} nuevos mensajes para Fidelizado desde {os.path.basename(filepath)}", 'success')
+            messagebox.showinfo("Éxito", f"Se cargaron {len(lines)} mensajes.", parent=self.root)
+
+        except Exception as e:
+            self.log(f"Error al cargar archivo de mensajes: {e}", 'error')
+            messagebox.showerror("Error de Lectura", f"No se pudo leer el archivo:\n{e}", parent=self.root)
+
     def handle_fidelizado_access(self):
         """Manejador del botón de Fidelizado (acceso directo)."""
         # Si la lógica de contraseña sigue siendo necesaria, se puede añadir aquí.
@@ -1211,60 +1245,123 @@ class Hermes:
         if not self.manual_messages_numbers and not self.manual_messages_groups:
             self._load_default_messages()
 
-        # Botón para volver a la vista principal
-        back_button_frame = ctk.CTkFrame(parent, fg_color="transparent")
-        back_button_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
-        back_button = ctk.CTkButton(back_button_frame, text="⬅️ Volver al Modo Tradicional",
-                                      command=self.show_traditional_view,
-                                      fg_color="transparent",
-                                      text_color=self.colors['text_light'],
-                                      hover_color=self.colors['bg_card'])
-        back_button.pack(side=tk.LEFT)
+        # Contenedor principal de la vista Fidelizado
+        fidelizado_container = ctk.CTkFrame(parent, fg_color="transparent")
+        fidelizado_container.pack(fill=tk.BOTH, expand=True)
 
         # Contenido principal de Fidelizado
-        content = ctk.CTkFrame(parent, fg_color=self.colors['bg_card'], corner_radius=30)
-        content.pack(fill=tk.BOTH, expand=True, padx=10)
+        content = ctk.CTkFrame(fidelizado_container, fg_color=self.colors['bg_card'], corner_radius=30)
+        content.pack(fill=tk.BOTH, expand=True, padx=10, pady=(20,0)) # Añadido pady para despegar del borde superior
 
         # Layout principal de 2 columnas
         content.grid_columnconfigure(0, weight=1)
         content.grid_columnconfigure(1, weight=1)
-        content.grid_rowconfigure(1, weight=1) # Fila de textboxes se expande
+        content.grid_rowconfigure(2, weight=1) # La fila de inputs se expande
 
-        # Título de la tarjeta
+        # --- Fila 0: Botón Volver ---
+        back_button_frame = ctk.CTkFrame(content, fg_color="transparent")
+        back_button_frame.grid(row=0, column=0, columnspan=2, sticky="w", padx=20, pady=(10, 0))
+        back_button = ctk.CTkButton(back_button_frame, text="⬅️ Volver al Modo Tradicional",
+                                      command=self.show_traditional_view,
+                                      fg_color="transparent",
+                                      text_color=self.colors['text_light'],
+                                      hover_color=self.colors['bg'])
+        back_button.pack(side=tk.LEFT)
+
+        # --- Fila 1: Título ---
         title_frame = ctk.CTkFrame(content, fg_color="transparent")
-        title_frame.grid(row=0, column=0, columnspan=2, sticky="ew", padx=20, pady=(15, 10))
+        title_frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=20, pady=(5, 10))
         ctk.CTkLabel(title_frame, text="🚀 Modo Fidelizado (Envío por Bucles)", font=self.fonts['card_title'], text_color=self.colors['text']).pack(anchor='w')
 
-        # --- Columna Izquierda: Números y Mensajes ---
-        left_col = ctk.CTkFrame(content, fg_color="transparent")
-        left_col.grid(row=1, column=0, sticky="nsew", padx=(20, 10), pady=(0, 20))
-        left_col.grid_rowconfigure(1, weight=1) # El textbox de números se expande
-        left_col.grid_rowconfigure(3, weight=1) # El textbox de mensajes se expande
+        # --- Fila 2: Inputs (Números y Grupos) y Controles ---
+        inputs_and_controls_frame = ctk.CTkFrame(content, fg_color="transparent")
+        inputs_and_controls_frame.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=20, pady=(0, 20))
+        inputs_and_controls_frame.grid_columnconfigure(0, weight=1) # Columna de inputs
+        inputs_and_controls_frame.grid_columnconfigure(1, weight=1) # Columna de controles
+        inputs_and_controls_frame.grid_rowconfigure(0, weight=1)
 
-        ctk.CTkLabel(left_col, text="📞 Números (+549 sin prefijo)", font=self.fonts['button'], text_color=self.colors['text']).grid(row=0, column=0, sticky="w", pady=(0, 5))
-        self.fidelizado_numbers_text = ctk.CTkTextbox(left_col, font=self.fonts['setting_label'], corner_radius=10, border_width=1, border_color="#cccccc", wrap=tk.WORD)
-        self.fidelizado_numbers_text.grid(row=1, column=0, sticky="nsew")
+        # --- Columna Izquierda: Inputs (Números y Grupos) ---
+        inputs_col = ctk.CTkFrame(inputs_and_controls_frame, fg_color="transparent")
+        inputs_col.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        inputs_col.grid_rowconfigure(0, weight=1) # Permitir que el frame interno crezca
+        inputs_col.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(left_col, text="✍️ Mensajes para Números (uno por línea)", font=self.fonts['button'], text_color=self.colors['text']).grid(row=2, column=0, sticky="w", pady=(15, 5))
-        self.fidelizado_messages_numbers_text = ctk.CTkTextbox(left_col, font=self.fonts['setting_label'], corner_radius=10, border_width=1, border_color="#cccccc", wrap=tk.WORD)
-        self.fidelizado_messages_numbers_text.grid(row=3, column=0, sticky="nsew")
+        # Frame para los textboxes
+        self.fidelizado_inputs_container = ctk.CTkFrame(inputs_col, fg_color="transparent")
+        self.fidelizado_inputs_container.grid(row=0, column=0, sticky="nsew")
+        self.fidelizado_inputs_container.grid_rowconfigure(1, weight=1) # Los textboxes se expanden
 
-        # --- Columna Derecha: Grupos y Controles ---
-        right_col = ctk.CTkFrame(content, fg_color="transparent")
-        right_col.grid(row=1, column=1, sticky="nsew", padx=(10, 20), pady=(0, 20))
-        right_col.grid_rowconfigure(1, weight=1) # El textbox de grupos se expande
+        # Widgets de Números (Label y Textbox)
+        self.fidelizado_numbers_frame = ctk.CTkFrame(self.fidelizado_inputs_container, fg_color="transparent")
+        ctk.CTkLabel(self.fidelizado_numbers_frame, text="📞 Números (+549 sin prefijo)", font=self.fonts['button'], text_color=self.colors['text']).pack(anchor="w", pady=(0, 5))
+        self.fidelizado_numbers_text = ctk.CTkTextbox(self.fidelizado_numbers_frame, font=self.fonts['setting_label'], corner_radius=10, border_width=1, border_color="#cccccc", wrap=tk.WORD)
+        self.fidelizado_numbers_text.pack(fill="both", expand=True)
 
-        ctk.CTkLabel(right_col, text="🔗 Links de Grupos (https://...)", font=self.fonts['button'], text_color=self.colors['text']).grid(row=0, column=0, sticky="w", pady=(0, 5))
-        self.fidelizado_groups_text = ctk.CTkTextbox(right_col, font=self.fonts['setting_label'], corner_radius=10, border_width=1, border_color="#cccccc", wrap=tk.WORD)
-        self.fidelizado_groups_text.grid(row=1, column=0, sticky="nsew")
+        # Widgets de Grupos (Label y Textbox)
+        self.fidelizado_groups_frame = ctk.CTkFrame(self.fidelizado_inputs_container, fg_color="transparent")
+        ctk.CTkLabel(self.fidelizado_groups_frame, text="🔗 Links de Grupos (https://...)", font=self.fonts['button'], text_color=self.colors['text']).pack(anchor="w", pady=(0, 5))
+        self.fidelizado_groups_text = ctk.CTkTextbox(self.fidelizado_groups_frame, font=self.fonts['setting_label'], corner_radius=10, border_width=1, border_color="#cccccc", wrap=tk.WORD)
+        self.fidelizado_groups_text.pack(fill="both", expand=True)
 
-        # Contenedor para Controles de Envío
-        controls_card = ctk.CTkFrame(right_col, fg_color="transparent")
-        controls_card.grid(row=2, column=0, sticky="ew", pady=(20, 0))
+        # --- Columna Derecha: Controles de Envío ---
+        controls_col = ctk.CTkFrame(inputs_and_controls_frame, fg_color="transparent")
+        controls_col.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+
+        # Card para Detección de Dispositivos
+        device_card = ctk.CTkFrame(controls_col, fg_color=self.colors['bg'], corner_radius=15)
+        device_card.pack(fill="x", pady=(0, 15))
+        ctk.CTkLabel(device_card, text="📱 Dispositivos", font=self.fonts['button'], text_color=self.colors['text']).pack(anchor='w', padx=15, pady=(10, 5))
+        device_container = ctk.CTkFrame(device_card, fg_color="transparent")
+        device_container.pack(fill="x", padx=15, pady=(0, 15))
+
+        self.fidelizado_detect_btn = ctk.CTkButton(device_container, text="🔍 Detectar Dispositivos",
+                                                  command=self.detect_devices,
+                                                  font=self.fonts['button_small'],
+                                                  fg_color=self.colors['action_detect'],
+                                                  hover_color=self.hover_colors['action_detect'],
+                                                  height=30)
+        self.fidelizado_detect_btn.pack(fill='x', pady=(0, 10))
+
+        self.fidelizado_device_list_label = ctk.CTkLabel(device_container, text="No hay dispositivos detectados.",
+                                                        font=self.fonts['setting_label'],
+                                                        text_color=self.colors['text_light'],
+                                                        wraplength=250,
+                                                        justify='left')
+        self.fidelizado_device_list_label.pack(anchor='w')
+
+        # Card para Mensajes
+        messages_card = ctk.CTkFrame(controls_col, fg_color=self.colors['bg'], corner_radius=15)
+        messages_card.pack(fill="x", pady=(0, 15))
+        ctk.CTkLabel(messages_card, text="✍️ Mensajes", font=self.fonts['button'], text_color=self.colors['text']).pack(anchor='w', padx=15, pady=(10, 5))
+        # Contenedor para la nueva UI de mensajes (se llenará en el siguiente paso)
+        self.fidelizado_messages_container = ctk.CTkFrame(messages_card, fg_color="transparent")
+        self.fidelizado_messages_container.pack(fill="x", padx=15, pady=(0, 15))
+        # UI de Mensajes
+        self.fidelizado_message_count_label = ctk.CTkLabel(self.fidelizado_messages_container, text="", font=self.fonts['setting_label'], text_color=self.colors['text'])
+        self.fidelizado_message_count_label.pack(anchor='w', pady=(0, 10))
+
+        # Inicializar texto del label
+        initial_message_count = len(self.manual_messages_numbers)
+        if initial_message_count > 0:
+            self.fidelizado_message_count_label.configure(text=f"✅ {initial_message_count} mensajes cargados")
+        else:
+            self.fidelizado_message_count_label.configure(text="⚠️ No hay mensajes cargados")
+
+        load_messages_btn = ctk.CTkButton(self.fidelizado_messages_container, text="Cargar Archivo",
+                                          command=self._load_fidelizado_messages_from_file,
+                                          font=self.fonts['button_small'],
+                                          fg_color=self.colors['blue'],
+                                          hover_color=self.hover_colors['action_detect'],
+                                          height=30)
+        load_messages_btn.pack(anchor='w')
+
+        # Card para Configuración
+        controls_card = ctk.CTkFrame(controls_col, fg_color=self.colors['bg'], corner_radius=15)
+        controls_card.pack(fill="x", expand=True)
 
         # Frame para los controles en grid
         controls_grid = ctk.CTkFrame(controls_card, fg_color="transparent")
-        controls_grid.pack(fill=tk.X, padx=20, pady=(0, 20))
+        controls_grid.pack(fill=tk.X, padx=15, pady=15)
         controls_grid.grid_columnconfigure([0, 1], weight=1)
 
         # Control de Modo
@@ -1343,23 +1440,36 @@ class Hermes:
         show_groups = self.fidelizado_mode in ["GRUPOS", "MIXTO"]
         show_mixto_variant = self.fidelizado_mode == "MIXTO"
 
-        # Función para gestionar la visibilidad de un widget y su label
-        def toggle_widget(widget, label, show):
-            if show:
-                label.grid()
-                widget.grid()
-            else:
-                label.grid_remove()
-                widget.grid_remove()
+        # Ocultar todos los frames de input primero
+        self.fidelizado_numbers_frame.grid_forget()
+        self.fidelizado_groups_frame.grid_forget()
 
-        # Labels de los textboxes (asumiendo que están en la misma grid que el textbox)
-        numbers_label = self.fidelizado_numbers_text.master.grid_slaves(row=0, column=0)[0]
-        messages_label = self.fidelizado_messages_numbers_text.master.grid_slaves(row=2, column=0)[0]
-        groups_label = self.fidelizado_groups_text.master.grid_slaves(row=0, column=0)[0]
+        # Configurar el grid del contenedor de inputs según el modo
+        if self.fidelizado_mode == "MIXTO":
+            # Modo Mixto: 1 fila, 2 columnas para mostrar ambos inputs
+            self.fidelizado_inputs_container.grid_columnconfigure(0, weight=1)
+            self.fidelizado_inputs_container.grid_columnconfigure(1, weight=1)
+            self.fidelizado_inputs_container.grid_rowconfigure(0, weight=1)
+            self.fidelizado_inputs_container.grid_rowconfigure(1, weight=0) # Asegurarse de que no haya una segunda fila
 
-        toggle_widget(self.fidelizado_numbers_text, numbers_label, show_numbers)
-        toggle_widget(self.fidelizado_messages_numbers_text, messages_label, True) # Mensajes siempre visibles
-        toggle_widget(self.fidelizado_groups_text, groups_label, show_groups)
+            self.fidelizado_numbers_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
+            self.fidelizado_groups_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
+
+        elif self.fidelizado_mode == "NUMEROS":
+            # Modo Números: 1 fila, 1 columna
+            self.fidelizado_inputs_container.grid_columnconfigure(0, weight=1)
+            self.fidelizado_inputs_container.grid_columnconfigure(1, weight=0)
+            self.fidelizado_inputs_container.grid_rowconfigure(0, weight=1)
+
+            self.fidelizado_numbers_frame.grid(row=0, column=0, sticky="nsew")
+
+        elif self.fidelizado_mode == "GRUPOS":
+            # Modo Grupos: 1 fila, 1 columna
+            self.fidelizado_inputs_container.grid_columnconfigure(0, weight=1)
+            self.fidelizado_inputs_container.grid_columnconfigure(1, weight=0)
+            self.fidelizado_inputs_container.grid_rowconfigure(0, weight=1)
+
+            self.fidelizado_groups_frame.grid(row=0, column=0, sticky="nsew")
 
         if show_mixto_variant:
             self.mixto_variant_container.grid(row=2, column=0, columnspan=2, sticky='w', pady=(0, 15))
@@ -1371,7 +1481,6 @@ class Hermes:
         # Limpiar contenido existente
         self.fidelizado_numbers_text.delete("1.0", tk.END)
         self.fidelizado_groups_text.delete("1.0", tk.END)
-        self.fidelizado_messages_numbers_text.delete("1.0", tk.END)
 
         # Rellenar con datos guardados
         if self.manual_inputs_numbers:
@@ -1379,12 +1488,8 @@ class Hermes:
         if self.manual_inputs_groups:
             self.fidelizado_groups_text.insert("1.0", "\n".join(self.manual_inputs_groups))
 
-        # Cargar mensajes (pueden ser los mismos para ambos al inicio)
-        if self.manual_messages_numbers:
-            self.fidelizado_messages_numbers_text.insert("1.0", "\n".join(self.manual_messages_numbers))
-
         # Si no hay mensajes de grupo pero sí de número (caso común), usarlos también para grupos
-        elif self.manual_messages_numbers and not self.manual_messages_groups:
+        if self.manual_messages_numbers and not self.manual_messages_groups:
              self.manual_messages_groups = self.manual_messages_numbers
 
     def start_fidelizado_sending(self):
@@ -1392,9 +1497,7 @@ class Hermes:
         # 1. Guardar los datos de los TextBoxes en las variables de la clase
         self.manual_inputs_numbers = [line.strip() for line in self.fidelizado_numbers_text.get("1.0", tk.END).splitlines() if line.strip()]
         self.manual_inputs_groups = [line.strip() for line in self.fidelizado_groups_text.get("1.0", tk.END).splitlines() if line.strip()]
-        self.manual_messages_numbers = [line.strip() for line in self.fidelizado_messages_numbers_text.get("1.0", tk.END).splitlines() if line.strip()]
-        # Asumimos que los mensajes de grupo son los mismos que los de número por simplicidad
-        self.manual_messages_groups = self.manual_messages_numbers
+        # LOS MENSAJES YA ESTÁN EN self.manual_messages_numbers, NO SE LEEN DE UN WIDGET
 
         # 2. Validar los datos
         if self.fidelizado_mode == "NUMEROS" and not self.manual_inputs_numbers:
@@ -3095,6 +3198,15 @@ class Hermes:
             self.fidelizado_unlock_btn.configure(state=tk.DISABLED)
         self.btn_pause.configure(state=tk.NORMAL)
         self.btn_stop.configure(state=tk.NORMAL)
+
+    def _update_device_labels(self):
+        """Actualiza todas las etiquetas de la UI que muestran la lista de dispositivos."""
+        if hasattr(self, 'fidelizado_device_list_label'):
+            if self.devices:
+                device_text = "Dispositivos Encontrados:\n" + "\n".join(self.devices)
+                self.fidelizado_device_list_label.configure(text=device_text)
+            else:
+                self.fidelizado_device_list_label.configure(text="No hay dispositivos detectados.")
 
     # --- ################################################################## ---
     # --- send_msg (MODIFICADO para loguear device)
