@@ -1351,7 +1351,7 @@ class Hermes:
                                           command=self._load_fidelizado_messages_from_file,
                                           font=self.fonts['button_small'],
                                           fg_color=self.colors['blue'],
-                                          hover_color=self.hover_colors['action_detect'],
+                                          hover_color=darken_color(self.colors['blue'], 0.15),
                                           height=30)
         load_messages_btn.pack(anchor='w')
 
@@ -1406,8 +1406,8 @@ class Hermes:
         ctk.CTkRadioButton(mixto_radio_frame, text="3G:1N", variable=self.mixto_variant, value=3, font=self.fonts['setting_label'], text_color=self.colors['text']).pack(side=tk.LEFT)
 
         # --- Botones de Acción ---
-        actions_frame = ctk.CTkFrame(right_col, fg_color="transparent")
-        actions_frame.grid(row=3, column=0, sticky="ew", pady=(10, 0))
+        actions_frame = ctk.CTkFrame(controls_col, fg_color="transparent")
+        actions_frame.pack(fill="x", pady=(10, 0))
         actions_frame.grid_columnconfigure(0, weight=1)
         actions_frame.grid_columnconfigure(1, weight=1)
 
@@ -1491,6 +1491,14 @@ class Hermes:
         # Si no hay mensajes de grupo pero sí de número (caso común), usarlos también para grupos
         if self.manual_messages_numbers and not self.manual_messages_groups:
              self.manual_messages_groups = self.manual_messages_numbers
+
+        # --- NUEVO: Actualizar el contador de mensajes ---
+        message_count = len(self.manual_messages_numbers)
+        if hasattr(self, 'fidelizado_message_count_label'): # Asegurarse de que el widget exista
+            if message_count > 0:
+                self.fidelizado_message_count_label.configure(text=f"✅ {message_count} mensajes cargados")
+            else:
+                self.fidelizado_message_count_label.configure(text="⚠️ No hay mensajes cargados")
 
     def start_fidelizado_sending(self):
         """Función específica para validar y preparar el envío desde la vista Fidelizado."""
